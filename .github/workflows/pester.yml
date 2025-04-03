@@ -1,0 +1,46 @@
+name: Run Pester Tests with Coverage
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+
+jobs:
+  test:
+    runs-on: windows-latest
+
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v3
+
+      - name: Install PowerShell
+        uses: PowerShell/PowerShell@v1.2.0
+        with:
+          pwsh-version: '7.2'
+
+      - name: Run Pester Tests with Coverage
+        shell: pwsh
+        run: |
+          Import-Module Pester
+          Invoke-Pester ./Tests/SAMLTrace.Tests.ps1 `
+            -CodeCoverage ./SAMLTrace/SAMLTrace.psm1 `
+            -OutputFormat NUnitXml `
+            -OutputFile ./Tests/coverage.xml `
+            -Output Detailed
+
+      - name: Auto-Bump Patch Version
+        if: github.ref == 'refs/heads/main'
+        shell: pwsh
+        run: |
+          $manifestPath = "./SAMLTrace/SAMLTrace.psd1"
+          $content = Get-Content $manifestPath -Raw
+          if ($content -match "ModuleVersion\s*=\s*'([0-9]+)\.([0-9]+)\.([0-9]+)'") {
+              $major = [int]$matches[1]
+              $minor = [int]$matches[2]
+              $patch = [int]$matches[3] + 1
+              $newVersion = "$major.$minor.$patch"
+              $newContent = $content -replace "ModuleVersion\s*=\s*'[^']+'", "ModuleVersion = '$newVersion'"
+              Set-Content -Path $manifestPath -Value $newContent
+              Write-Output "🔁 Version bumped to $newVersion"
+          }
